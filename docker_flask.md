@@ -120,6 +120,56 @@
 ```
 ## template
 模板渲染：render_template("index.html")
+## view 传递数据到 模板
+> render_template("index.html", "数据名(模板中的变量名)"="想要传递的数据")
+
+## 连接mysql数据库
+安装数据库操作拓展
+> pip  install  Flask-SQLAlchemy
+
+> pip  install  Flask-Migrate
+
+```python
+# Flask-SQLAlchemy使用
+from flask_sqlalchemy import SQLAlchemy
+import pymysql
+
+app = Flask(__name__)
+# 基本配置
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
+app.config['SQLALCHEMY_DATABASE_URI'] = (
+        'mysql+pymysql://root:root@localhost/flask_demo'
+        )
+
+db = SQLAlchemy(app) # 实例化SQLAlchemy类
+
+# 创建数据表类
+
+class User(db.Model):
+    id = db.Column(db.Integer, autoincrement=True,primary_key=True)
+    username = db.Column(db.String(80),unique=True,nullable=False)
+    email = db.Column(db.String(120),unique=True,nullable=False)
+
+    def __repr__(self):
+        return '<User %r>' % self.username
+
+
+if __name__ == "__main__":
+    db.create_all() # 执行创建命令
+    admin = User(username='admin', email='admin@example.com')
+    guest = User(username='guest', email='guest@example.com')# 未存入数据库
+    db.session.add(admin)
+    db.session.add(guest)
+    db.session.commit() # 存入数据库中
+
+    # 查询数据
+    User.query.all()
+    User.query.filter_by(username='admin').first()
+
+    # 查询具体字段信息
+    User.query.filter_by(username='admin').first()."字段名"
+```
+
 
 
 # docker-compose flask
@@ -293,4 +343,63 @@ class TodoSimple(Resource):
 ```
 
 
+#### 序列化 Schema
 
+#### Celery 任务队列
+任务Task:
+
+&emsp;&emsp;包含异步任务和定时任务。其中，异步任务通常在业务逻辑中被触发并发往任务队列，而定时任务由 Celery Beat 进程周期性地将任务发往任务队列。
+
+消息中间件 Broker:
+
+&emsp;&emsp;任务调度队列，接收任务生产者发来的消息（即任务），将任务存入队列。Celery 本身不提供队列服务，官方推荐使用 RabbitMQ 和 Redis 等。
+
+任务执行单元 Worker:
+
+&emsp;&emsp;执行任务的处理单元，它实时监控消息队列，获取队列中调度的任务，并执行它。
+
+任务结果储存 Backed:
+
+&emsp;&emsp;存储任务的执行结果，以供查询。同消息中间件一样，存储也可使用 RabbitMQ, Redis 和 MongoDB 等。    
+
+
+## 实现步骤：
+（确保 redis 已正确安装，并开启 redis 服务。）
+1. 编写配置文件
+   ```python   
+    BROKER_URL = 'redis://127.0.0.1:6379'               # 指定 Broker
+    CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'  # 指定 Backend
+
+    CELERY_TIMEZONE='Asia/Shanghai'                     # 指定时区，默认是 UTC
+    # CELERY_TIMEZONE='UTC'                             
+
+    CELERY_IMPORTS = (                                  # 指定导入的任务模块
+        'celery_app.task1',
+        'celery_app.task2'
+    )
+   ```
+1. 创建一个 Celery 实例
+    ```python
+    # -*- coding: utf-8 -*-
+    import time
+    from celery import Celery
+
+    broker = 'redis://127.0.0.1:6379'
+    backend = 'redis://127.0.0.1:6379/0'
+
+    app = Celery('my_task', broker=broker, backend=backend)
+
+    @app.task
+    def add(x, y):
+        time.sleep(5)     # 模拟耗时操作
+        return x + y
+
+    ```
+2. 启动 Celery Worker
+   > celery worker -A tasks --loglevel=info # linux系统
+3. 应用程序调用异步任务
+    ```python
+    from tasks import add
+    add.delay(2, 8)
+    >>> <AsyncResult: 2272ddce-8be5-493f-b5ff-35a0d9fe600f>
+    ```
