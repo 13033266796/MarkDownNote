@@ -177,6 +177,8 @@
     DELETE      ->      Delete
 
 ## flask_restplus
+
+#### 示例
 ```python
 from flask import Flask, request
 from flask_restplus import Resource, Api
@@ -185,7 +187,7 @@ app = Flask(__name__) # 实例化一个app对象
 api = Api(app)        # 将app和restplus的Api绑定
 UserInfo = {}         # 资源
 
-
+# app绑定api后 路由操作通过api
 @api.route('/restplus')
 class TestRestplus(Resource):
     def get(self):
@@ -193,21 +195,102 @@ class TestRestplus(Resource):
     def post(self):
         return {'key': "this is function 'post' "}
 
-
 @api.route('/test1/<string:user_id>')
 class TestRestplus2(Resource):
-    def get(self, user_id):
+    def get(self, user_id):             # 获取资源
         return {user_id : UserInfo[user_id]}
 
-    def put(self, user_id):
+    def put(self, user_id):             # 更新资源
         UserInfo[user_id] = request.form.get('data')
         return {user_id : UserInfo[user_id]}
 
-    def post(self, user_id):
+    def post(self, user_id):            # 创建资源
         UserInfo[user_id] = request.get('data')
         return {user_id: UserInfo[user_id]}
 
-    def delete(self, user_id):
+    def delete(self, user_id):          # 删除资源
         UserInfo.pop(user_id)
         return 'delete successfully !'
 ```
+#### 端点（Endpoints）
+&emsp;&emsp;可以向Api对象的add_resource()方法或route()装饰器中传入多个URL，这样每个URL都将会路由到该资源上。
+```python
+api.add_resource(HelloWorld, '/hello', '/world')
+
+# 或者下面装饰器方式，二者等价
+
+@api.route('/hello', '/world')
+class HelloWorld(Resource):
+    pass
+```
+
+&emsp;&emsp;也可以将URL中的部分内容设置成变量，以此来匹配资源方法
+```python
+api.add_resource(Todo, '/todo/<int:todo_id>', endpoint='todo_ep')
+
+# 或者下面装饰器方式，二者等价
+
+@api.route('/todo/<int:todo_id>', endpoint='todo_ep')
+class HelloWorld(Resource):
+    pass
+
+# 这样，URL为/todo/1、/todo/2等以/todo/加一个int型整数的URL都可以路由到该资源
+```
+#### 数据格式化（Data Formatting）
+&emsp;&emsp;Flask-RESTPlus提供了fields模块和marshal_with()装饰器。类似于Django ORM
+```python
+model = api.model('Model', {
+    'task': fields.String,
+    'uri': fields.Url('todo_ep',absolute=True) # absolute参数表示生成的url是否是绝对路径
+})
+
+@api.route('/todo',endpoint='todo_ep')
+class Todo(Resource):
+    @api.marshal_with(model)
+    def get(self, **kwargs):
+        return TodoDao(todo_id='my_todo', task='Remember the milk')
+```
+#### 数据顺序保留
+默认情况下，字段顺序并未得到保留，因为它会损耗性能。不过，如果你确实需要保留字段顺序，那么可以向类或函数传入一个ordered=True的参数项，以此强制进行顺序保留：
+<br>
+&emsp;&emsp;Api全局保留：api = Api(ordered = True)
+<br>
+&emsp;&emsp;Namespace全局保留：ns = Namespace(ordered=True)
+<br>
+&emsp;&emsp;marshal()局部保留：return marshal(data, fields, ordered=True)
+```python  
+@api.route('/todo',endpoint='todo_ep')
+class Todo(Resource):
+    # @api.marshal_with(model)
+    def get(self, **kwargs):
+        return api.marshal(TodoDao(todo_id='my_todo', task='Remember the milk', developer='Tom'),model,ordered=False)
+```
+
+#### 参数解析（Argument Parsing）
+```python
+# 部分
+from flask_restplus import reqparse
+
+parser = reqparse.RequestParser()
+parser.add_argument('rate', type=int, help='Rate to charge for this resource')
+    # 参数名为rate，数据类型为int，请求时必须发送此参数，如果验证不通过时将会返回help指定的信息。
+args = parser.parse_args()
+
+todos = {
+    '1':'eat',
+    '2':'sleep'
+}
+
+@api.route('/<string:todo_id>')
+class TodoSimple(Resource):
+    def get(self, todo_id):
+        return {todo_id: todos[todo_id]}
+
+    def put(self, todo_id):
+        args = parser.parse_args()
+        todos[todo_id] = request.form['data']
+        return {todo_id: todos[todo_id]}
+```
+
+
+
